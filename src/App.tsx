@@ -72,13 +72,15 @@ export default function App() {
   });
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    const saved = localStorage.getItem('labvibharam_current_user') || sessionStorage.getItem('labvibharam_current_user');
-    if (saved) {
-      try {
+    try {
+      const saved =
+        (typeof window !== 'undefined' && window.localStorage?.getItem('labvibharam_current_user')) ||
+        (typeof window !== 'undefined' && window.sessionStorage?.getItem('labvibharam_current_user'));
+      if (saved) {
         return JSON.parse(saved);
-      } catch {
-        return null;
       }
+    } catch (e) {
+      console.warn('Storage read restricted:', e);
     }
     return null;
   });
@@ -174,14 +176,18 @@ export default function App() {
     setCurrentUser(user);
     loadDatasetForUser(user.id);
 
-    if (rememberMe) {
-      localStorage.setItem('labvibharam_current_user', JSON.stringify(user));
-      localStorage.setItem('labvibharam_remember_me', 'true');
-    } else {
-      localStorage.removeItem('labvibharam_current_user');
-      localStorage.removeItem('labvibharam_remember_me');
+    try {
+      if (rememberMe) {
+        localStorage?.setItem('labvibharam_current_user', JSON.stringify(user));
+        localStorage?.setItem('labvibharam_remember_me', 'true');
+      } else {
+        localStorage?.removeItem('labvibharam_current_user');
+        localStorage?.removeItem('labvibharam_remember_me');
+      }
+      sessionStorage?.setItem('labvibharam_current_user', JSON.stringify(user));
+    } catch (e) {
+      console.warn('Unable to persist session to storage:', e);
     }
-    sessionStorage.setItem('labvibharam_current_user', JSON.stringify(user));
 
     setNotifications((prev) => [
       {
@@ -197,8 +203,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('labvibharam_current_user');
-    sessionStorage.removeItem('labvibharam_current_user');
+    try {
+      localStorage?.removeItem('labvibharam_current_user');
+      sessionStorage?.removeItem('labvibharam_current_user');
+    } catch (e) {
+      console.warn('Storage clear error:', e);
+    }
     setCurrentUser(null);
   };
 
@@ -218,10 +228,14 @@ export default function App() {
     setRegisteredUsers(list);
     saveRegisteredUsers(list);
 
-    if (localStorage.getItem('labvibharam_remember_me') === 'true') {
-      localStorage.setItem('labvibharam_current_user', JSON.stringify(updated));
+    try {
+      if (localStorage?.getItem('labvibharam_remember_me') === 'true') {
+        localStorage?.setItem('labvibharam_current_user', JSON.stringify(updated));
+      }
+      sessionStorage?.setItem('labvibharam_current_user', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Storage update error:', e);
     }
-    sessionStorage.setItem('labvibharam_current_user', JSON.stringify(updated));
   };
 
   // Adjust active tab if current tab becomes hidden
@@ -784,7 +798,7 @@ export default function App() {
         title: `${newSample.priority} Sample Dispatched`,
         message: `${newSample.testPanel} for ${newSample.patientName} (${newSample.patientHn}) queued on ${newSample.instrument}.`,
         time: 'Just now',
-        type: newSample.priority === 'STAT' ? 'urgent' : 'normal',
+        type: newSample.priority === 'STAT' ? 'urgent' : 'info',
         read: false,
         tabTarget: 'dashboard'
       },
@@ -829,7 +843,7 @@ export default function App() {
         title: 'Send-Out Specimen Dispatched',
         message: `Order ${newOrder.orderNumber} for ${newOrder.patientName} (${newOrder.patientHn}) sent to ${newOrder.destinationLab}.`,
         time: 'Just now',
-        type: newOrder.urgency === 'STAT' ? 'urgent' : 'normal',
+        type: newOrder.urgency === 'STAT' ? 'urgent' : 'info',
         read: false,
         tabTarget: 'outlab'
       },
@@ -849,10 +863,10 @@ export default function App() {
             ...order,
             status,
             resultSummary: resultSummary !== undefined ? resultSummary : order.resultSummary,
-            receivedDateTime:
+            resultReceivedDate:
               status === 'Result Received'
                 ? new Date().toISOString().replace('T', ' ').slice(0, 16)
-                : order.receivedDateTime
+                : order.resultReceivedDate
           };
         }
         return order;
