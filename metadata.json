@@ -1,0 +1,6 @@
+{
+  "name": "LABVIBHARAM Clinical Excellence",
+  "description": "Comprehensive Clinical Laboratory Operations management system featuring Stock Inventory, Outlab Referral & Send-Out Directory, EQA Quality Assurance, Monthly Roster Scheduling, Internal Lab Directory, and Department Automation Video Tutorials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
