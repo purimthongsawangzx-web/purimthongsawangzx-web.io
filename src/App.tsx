@@ -16,7 +16,8 @@ import {
   UserAccount,
   OutlabTest,
   OutlabSendoutOrder,
-  ReferralLab
+  ReferralLab,
+  EQASchemeDefinition
 } from './types';
 import {
   INITIAL_STOCK_ITEMS,
@@ -53,6 +54,7 @@ import { AddOutlabTestModal } from './components/modals/AddOutlabTestModal';
 import { NewSendoutOrderModal } from './components/modals/NewSendoutOrderModal';
 import { OutlabDetailModal } from './components/modals/OutlabDetailModal';
 import { AddTrialModal } from './components/modals/AddTrialModal';
+import { ManageSchemesModal } from './components/modals/ManageSchemesModal';
 import { UploadResultModal } from './components/modals/UploadResultModal';
 import { ViewSubmissionModal } from './components/modals/ViewSubmissionModal';
 import { AddStaffModal } from './components/modals/AddStaffModal';
@@ -95,6 +97,8 @@ export default function App() {
   // Primary Domain States (Isolated per user)
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [trials, setTrials] = useState<EQATrial[]>([]);
+  const [customSchemes, setCustomSchemes] = useState<EQASchemeDefinition[]>([]);
+  const [deletedSchemeCodes, setDeletedSchemeCodes] = useState<string[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [shifts, setShifts] = useState<ShiftAssignment[]>([]);
   const [directorySections, setDirectorySections] = useState<DirectorySection[]>([]);
@@ -110,6 +114,8 @@ export default function App() {
     const ds = loadUserDataset(userId);
     setStockItems(ds.stockItems);
     setTrials(ds.trials);
+    setCustomSchemes(ds.customSchemes || []);
+    setDeletedSchemeCodes(ds.deletedSchemeCodes || []);
     setStaffList(ds.staffList);
     setShifts(ds.shifts);
     setDirectorySections(ds.directorySections);
@@ -136,6 +142,8 @@ export default function App() {
       saveUserDataset(currentUser.id, {
         stockItems,
         trials,
+        customSchemes,
+        deletedSchemeCodes,
         staffList,
         shifts,
         directorySections,
@@ -153,6 +161,8 @@ export default function App() {
     currentUser,
     stockItems,
     trials,
+    customSchemes,
+    deletedSchemeCodes,
     staffList,
     shifts,
     directorySections,
@@ -265,6 +275,7 @@ export default function App() {
   const [showNewAnalysisModal, setShowNewAnalysisModal] = useState<boolean>(false);
   const [showAddItemModal, setShowAddItemModal] = useState<boolean>(false);
   const [showAddTrialModal, setShowAddTrialModal] = useState<boolean>(false);
+  const [showManageSchemesModal, setShowManageSchemesModal] = useState<boolean>(false);
   const [activeUploadTrial, setActiveUploadTrial] = useState<EQATrial | null>(null);
   const [activeViewTrial, setActiveViewTrial] = useState<EQATrial | null>(null);
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(false);
@@ -467,23 +478,118 @@ export default function App() {
   };
 
   // --- Handlers: EQA Quality Assurance ---
+  const handleAddCustomScheme = (newScheme: EQASchemeDefinition) => {
+    setCustomSchemes((prev) => [
+      ...prev.filter((s) => s.code.toUpperCase() !== newScheme.code.toUpperCase()),
+      newScheme
+    ]);
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'New EQA Scheme Registered',
+        message: `Proficiency scheme "${newScheme.shortName}" (${newScheme.fullName}) added to your laboratory catalog.`,
+        time: 'Just now',
+        type: 'info',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
+  };
+
+  const handleUpdateCustomScheme = (updatedScheme: EQASchemeDefinition) => {
+    setCustomSchemes((prev) => prev.map((s) => (s.id === updatedScheme.id ? updatedScheme : s)));
+  };
+
+  const handleDeleteCustomScheme = (schemeId: string) => {
+    const scheme = customSchemes.find((s) => s.id === schemeId);
+    setCustomSchemes((prev) => prev.filter((s) => s.id !== schemeId));
+    if (scheme) {
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: 'Custom Scheme Deleted',
+          message: `Custom scheme "${scheme.shortName}" has been permanently removed.`,
+          time: 'Just now',
+          type: 'info',
+          read: false,
+          tabTarget: 'eqa'
+        },
+        ...prev
+      ]);
+    }
+  };
+
+  const handleDeleteScheme = (scheme: EQASchemeDefinition) => {
+    if (scheme.isCustom) {
+      setCustomSchemes((prev) => prev.filter((s) => s.id !== scheme.id));
+    } else {
+      setDeletedSchemeCodes((prev) => {
+        const set = new Set(prev);
+        set.add(scheme.code.toUpperCase());
+        set.add(scheme.id.toUpperCase());
+        return Array.from(set);
+      });
+    }
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'Scheme Removed',
+        message: `Proficiency scheme "${scheme.shortName}" (${scheme.fullName}) was removed from your catalog.`,
+        time: 'Just now',
+        type: 'warning',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
+  };
+
+  const handleRestoreDefaultSchemes = () => {
+    setDeletedSchemeCodes([]);
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'Default Schemes Restored',
+        message: 'All standard international and national proficiency schemes have been restored.',
+        time: 'Just now',
+        type: 'info',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
+  };
+
   const handleAddTrial = (newTrial: Partial<EQATrial>) => {
     const trial: EQATrial = {
       id: `trial-${Date.now()}`,
       scheme: newTrial.scheme || 'RIQAS',
       title: newTrial.title || 'General Laboratory Survey',
-      cycle: newTrial.cycle || 'Cycle 2023',
+      cycle: newTrial.cycle || 'Cycle 2026-T1',
       trialNumber: newTrial.trialNumber || 'Trial 01',
       status: 'pending',
       statusLabel: 'Pending Analysis',
-      receivedDate: newTrial.receivedDate || 'Oct 20, 2023',
-      deadlineDate: newTrial.deadlineDate || 'Nov 15, 2023',
+      receivedDate: newTrial.receivedDate || 'Today',
+      deadlineDate: newTrial.deadlineDate || 'Nov 30, 2026',
       instrument: newTrial.instrument || 'Cobas 8000',
-      assignedStaff: newTrial.assignedStaff || 'Dr. Sarah Chen',
+      assignedStaff: newTrial.assignedStaff || 'Dr. Jane Doe, MT',
       labSection: newTrial.labSection || 'Core Lab',
       parameters: newTrial.parameters || ['Analyte 1', 'Analyte 2']
     };
     setTrials((prev) => [trial, ...prev]);
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'EQA Trial Registered',
+        message: `${trial.scheme} - ${trial.title} (${trial.trialNumber}) registered for ${trial.instrument}.`,
+        time: 'Just now',
+        type: 'info',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
   };
 
   const handleUploadTrialResults = (
@@ -522,7 +628,67 @@ export default function App() {
   };
 
   const handleDeleteTrial = (id: string) => {
+    const target = trials.find((t) => t.id === id);
     setTrials((prev) => prev.filter((t) => t.id !== id));
+    if (target) {
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: 'EQA Trial Deleted',
+          message: `Trial "${target.title}" (${target.scheme} ${target.trialNumber}) was removed.`,
+          time: 'Just now',
+          type: 'info',
+          read: false,
+          tabTarget: 'eqa'
+        },
+        ...prev
+      ]);
+    }
+  };
+
+  const handleDeleteMultipleTrials = (ids: string[]) => {
+    const count = ids.length;
+    setTrials((prev) => prev.filter((t) => !ids.includes(t.id)));
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'Batch Trials Deleted',
+        message: `Successfully deleted ${count} external quality trial record${count > 1 ? 's' : ''}.`,
+        time: 'Just now',
+        type: 'info',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
+  };
+
+  const handleResetTrialSubmission = (trialId: string) => {
+    setTrials((prev) =>
+      prev.map((t) => {
+        if (t.id === trialId) {
+          const { submittedDate, resultValues, fileName, score, ...rest } = t;
+          return {
+            ...rest,
+            status: 'pending',
+            statusLabel: 'Pending Analysis'
+          };
+        }
+        return t;
+      })
+    );
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        title: 'Submission Status Reset',
+        message: `Trial record ${trialId} was reset to Pending status.`,
+        time: 'Just now',
+        type: 'info',
+        read: false,
+        tabTarget: 'eqa'
+      },
+      ...prev
+    ]);
   };
 
   // --- Handlers: Staff & Monthly Roster ---
@@ -1025,6 +1191,7 @@ export default function App() {
               dailyNotes={dailyNotes}
               onOpenDailyNotes={() => setShowDailyNotesModal(true)}
               onToggleDailyNote={handleToggleDailyNote}
+              customSchemes={customSchemes}
             />
           )}
 
@@ -1077,6 +1244,10 @@ export default function App() {
               onOpenUploadResult={(trial) => setActiveUploadTrial(trial)}
               onViewSubmission={(trial) => setActiveViewTrial(trial)}
               onDeleteTrial={handleDeleteTrial}
+              onDeleteMultipleTrials={handleDeleteMultipleTrials}
+              customSchemes={customSchemes}
+              deletedSchemeCodes={deletedSchemeCodes}
+              onOpenManageSchemes={() => setShowManageSchemesModal(true)}
             />
           )}
 
@@ -1187,6 +1358,27 @@ export default function App() {
         isOpen={showAddTrialModal}
         onClose={() => setShowAddTrialModal(false)}
         onSubmit={handleAddTrial}
+        customSchemes={customSchemes}
+        deletedSchemeCodes={deletedSchemeCodes}
+        onOpenManageSchemes={() => setShowManageSchemesModal(true)}
+        onAddCustomScheme={handleAddCustomScheme}
+      />
+
+      <ManageSchemesModal
+        isOpen={showManageSchemesModal}
+        onClose={() => setShowManageSchemesModal(false)}
+        customSchemes={customSchemes}
+        deletedSchemeCodes={deletedSchemeCodes}
+        onAddCustomScheme={handleAddCustomScheme}
+        onUpdateCustomScheme={handleUpdateCustomScheme}
+        onDeleteCustomScheme={handleDeleteCustomScheme}
+        onDeleteScheme={handleDeleteScheme}
+        onRestoreDefaultSchemes={handleRestoreDefaultSchemes}
+        trials={trials}
+        onSelectSchemeForTrial={(schemeCode) => {
+          setShowManageSchemesModal(false);
+          setShowAddTrialModal(true);
+        }}
       />
 
       <UploadResultModal
@@ -1200,6 +1392,14 @@ export default function App() {
         trial={activeViewTrial}
         isOpen={Boolean(activeViewTrial)}
         onClose={() => setActiveViewTrial(null)}
+        onDeleteTrial={(trialId) => {
+          handleDeleteTrial(trialId);
+          setActiveViewTrial(null);
+        }}
+        onResetSubmission={(trialId) => {
+          handleResetTrialSubmission(trialId);
+          setActiveViewTrial(null);
+        }}
       />
 
       <AddStaffModal

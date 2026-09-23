@@ -5,8 +5,10 @@ import {
   EQATrial,
   StaffMember,
   NavigationTab,
-  DailyNote
+  DailyNote,
+  EQASchemeDefinition
 } from '../../types';
+import { getSchemeInfo } from '../../data/standardSchemes';
 
 interface DashboardViewProps {
   samples: LabAnalysisSample[];
@@ -19,6 +21,7 @@ interface DashboardViewProps {
   dailyNotes?: DailyNote[];
   onOpenDailyNotes?: () => void;
   onToggleDailyNote?: (id: string) => void;
+  customSchemes?: EQASchemeDefinition[];
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -31,7 +34,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenUploadResult,
   dailyNotes = [],
   onOpenDailyNotes,
-  onToggleDailyNote
+  onToggleDailyNote,
+  customSchemes = []
 }) => {
   const criticalStock = stockItems.filter(
     (item) => item.quantity <= item.minQuantity * 0.3
@@ -308,32 +312,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             ) : (
               <div className="space-y-3">
-                {urgentTrials.map((t) => (
-                  <div
-                    key={t.id}
-                    className="p-3.5 rounded-2xl bg-white border border-[#E2E8F0] space-y-2"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#0284C7] text-white">
-                          {t.scheme}
-                        </span>
-                        <h4 className="font-bold text-xs text-[#0F172A] mt-1.5">{t.title}</h4>
+                {urgentTrials.map((t) => {
+                  const schemeInfo = getSchemeInfo(t.scheme, customSchemes);
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-3.5 rounded-2xl bg-white border border-[#E2E8F0] space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${schemeInfo.badgeBg} ${schemeInfo.badgeText}`}>
+                            {schemeInfo.shortName}
+                          </span>
+                          <h4 className="font-bold text-xs text-[#0F172A] mt-1.5">{t.title}</h4>
+                        </div>
+                        <span className="text-[10px] font-bold text-[#DC2626]">Due Tomorrow</span>
                       </div>
-                      <span className="text-[10px] font-bold text-[#DC2626]">Due Tomorrow</span>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-[#64748B]">{t.instrument}</span>
-                      <button
-                        onClick={() => onOpenUploadResult(t)}
-                        className="text-xs font-bold text-[#1E40AF] hover:underline"
-                      >
-                        Upload →
-                      </button>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-[#64748B]">{t.instrument}</span>
+                        <button
+                          onClick={() => onOpenUploadResult(t)}
+                          className="text-xs font-bold text-[#1E40AF] hover:underline"
+                        >
+                          Upload →
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

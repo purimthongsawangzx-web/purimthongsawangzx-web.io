@@ -1,18 +1,39 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { EQATrial } from '../../types';
 
 interface ViewSubmissionModalProps {
   trial: EQATrial | null;
   isOpen: boolean;
   onClose: () => void;
+  onDeleteTrial?: (id: string) => void;
+  onResetSubmission?: (id: string) => void;
 }
 
 export const ViewSubmissionModal: React.FC<ViewSubmissionModalProps> = ({
   trial,
   isOpen,
-  onClose
+  onClose,
+  onDeleteTrial,
+  onResetSubmission
 }) => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   if (!isOpen || !trial) return null;
+
+  const handleDelete = () => {
+    if (onDeleteTrial) {
+      onDeleteTrial(trial.id);
+      setShowDeleteConfirm(false);
+      onClose();
+    }
+  };
+
+  const handleReset = () => {
+    if (onResetSubmission && window.confirm('Reset this trial submission? Status will return to Pending and recorded values will be cleared.')) {
+      onResetSubmission(trial.id);
+      onClose();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
@@ -30,7 +51,10 @@ export const ViewSubmissionModal: React.FC<ViewSubmissionModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              setShowDeleteConfirm(false);
+              onClose();
+            }}
             className="text-[#94A3B8] hover:text-[#0F172A] p-1.5 rounded-full hover:bg-[#F1F5F9]"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -97,9 +121,67 @@ export const ViewSubmissionModal: React.FC<ViewSubmissionModalProps> = ({
             </div>
           )}
 
-          <div className="pt-4 border-t border-[#E2E8F0] flex items-center justify-end">
+          {/* Delete Confirmation Box */}
+          {showDeleteConfirm && (
+            <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-900 space-y-3 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-600 text-[20px]">warning</span>
+                <span className="font-bold text-xs">Permanently delete this trial record?</span>
+              </div>
+              <p className="text-[11px] text-red-700 leading-relaxed">
+                This will delete "{trial.title}" ({trial.trialNumber}) and all recorded results from your database. This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-3 py-1.5 rounded-full bg-red-600 text-white text-xs font-bold hover:bg-red-700 cursor-pointer shadow-xs"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-[#E2E8F0] flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              {onDeleteTrial && !showDeleteConfirm && (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 font-bold text-xs rounded-full flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Delete this trial"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                  <span>Delete Trial</span>
+                </button>
+              )}
+
+              {onResetSubmission && !showDeleteConfirm && (
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="px-3 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 font-bold text-xs rounded-full flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Reset to pending status to re-enter values"
+                >
+                  <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                  <span>Reset Status</span>
+                </button>
+              )}
+            </div>
+
             <button
-              onClick={onClose}
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                onClose();
+              }}
               className="px-6 py-2.5 bg-[#1E40AF] hover:bg-[#1D4ED8] text-white font-['Public_Sans',sans-serif] font-bold text-xs uppercase tracking-widest rounded-full shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               Close Record

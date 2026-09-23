@@ -216,6 +216,38 @@ export const INITIAL_EQA_TRIALS: EQATrial[] = [
     status: 'pending',
     statusLabel: 'Pending Analysis',
     parameters: ['Specific Gravity', 'pH', 'Protein', 'Leukocyte Esterase', 'RBC Casts']
+  },
+  {
+    id: 'eqa-6',
+    scheme: 'DMSC_BLQS',
+    title: 'EQAC Clinical Chemistry (กรมวิทย์ฯ)',
+    cycle: 'Cycle 2026-T2',
+    trialNumber: 'Trial 02',
+    receivedDate: 'Aug 14, 2026',
+    deadlineDate: 'Aug 30, 2026',
+    instrument: 'Cobas 8000 c702',
+    assignedStaff: 'Dr. Jane Doe, MT',
+    labSection: 'Core Lab',
+    status: 'pending',
+    statusLabel: 'Pending Analysis',
+    parameters: ['Cholesterol', 'Triglycerides', 'HDL-C', 'Uric Acid', 'Total Protein', 'Albumin']
+  },
+  {
+    id: 'eqa-7',
+    scheme: 'EQAM_MAHIDOL',
+    title: 'Parasitology & Stool Examination (ม.มหิดล)',
+    cycle: 'Cycle 2026-1',
+    trialNumber: 'Trial 01',
+    receivedDate: 'Jul 28, 2026',
+    deadlineDate: 'Aug 15, 2026',
+    submittedDate: 'Aug 12, 2026',
+    instrument: 'Olympus BX53',
+    assignedStaff: 'Somchai P.',
+    labSection: 'Microscopy Lab',
+    status: 'submitted',
+    statusLabel: 'Submitted',
+    parameters: ['Protozoa Identification', 'Helminth Ova / Larva', 'Occult Blood'],
+    score: '100% Correct Identification'
   }
 ];
 

@@ -1,59 +1,94 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { EQATrial, EQAStatus } from '../../types';
+import { EQATrial, EQAStatus, EQASchemeDefinition } from '../../types';
+import { getSchemeInfo, getAllSchemes } from '../../data/standardSchemes';
 
 interface EQAViewProps {
   trials: EQATrial[];
-  searchQuery: string;
+  searchQuery?: string;
   onOpenAddTrial: () => void;
   onOpenUploadResult: (trial: EQATrial) => void;
   onViewSubmission: (trial: EQATrial) => void;
   onDeleteTrial: (id: string) => void;
+  onDeleteMultipleTrials?: (ids: string[]) => void;
+  customSchemes?: EQASchemeDefinition[];
+  deletedSchemeCodes?: string[];
+  onOpenManageSchemes?: () => void;
 }
 
 export const EQAView: React.FC<EQAViewProps> = ({
   trials,
-  searchQuery,
+  searchQuery = '',
   onOpenAddTrial,
   onOpenUploadResult,
   onViewSubmission,
-  onDeleteTrial
+  onDeleteTrial,
+  onDeleteMultipleTrials,
+  customSchemes = [],
+  deletedSchemeCodes = [],
+  onOpenManageSchemes
 }) => {
   const [selectedSchemeFilter, setSelectedSchemeFilter] = useState<string>('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
-  const [showFilterMenu, setShowFilterMenu] = useState<boolean>(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
 
-  const activeCount = trials.filter((t) => t.status !== 'submitted').length;
-  const pendingCount = trials.filter((t) => t.status === 'pending').length;
-  const overdueCount = trials.filter((t) => t.status === 'overdue' || t.status === 'due_tomorrow').length;
-  const complianceRate = 98;
+  // Deletion and batch selection states
+  const [trialToDelete, setTrialToDelete] = useState<EQATrial | null>(null);
+  const [isBatchMode, setIsBatchMode] = useState<boolean>(false);
+  const [selectedTrialIds, setSelectedTrialIds] = useState<string[]>([]);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState<boolean>(false);
 
-  // Close filter menu when clicking outside
+  // Close filter menu when clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+      if (
+        filterMenuRef.current &&
+        !filterMenuRef.current.contains(event.target as Node)
+      ) {
         setShowFilterMenu(false);
       }
     };
-    if (showFilterMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showFilterMenu]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
+  const allKnownSchemes = useMemo(() => {
+    return getAllSchemes(customSchemes, deletedSchemeCodes);
+  }, [customSchemes, deletedSchemeCodes]);
+
+  // Compute schemes present in trials or custom, excluding deleted schemes
+  const filterSchemeOptions = useMemo(() => {
+    const deletedSet = new Set(deletedSchemeCodes.map((c) => c.toUpperCase()));
+    const set = new Set<string>();
+    trials.forEach((t) => {
+      if (t.scheme && !deletedSet.has(t.scheme.toUpperCase())) {
+        set.add(t.scheme.toUpperCase());
+      }
+    });
+    customSchemes.forEach((cs) => {
+      if (!deletedSet.has(cs.code.toUpperCase())) {
+        set.add(cs.code.toUpperCase());
+      }
+    });
+    ['RIQAS', 'CAP', 'UKNEQAS', 'EQAS', 'DMSC_BLQS', 'EQAM_MAHIDOL', 'RCPA'].forEach((s) => {
+      if (!deletedSet.has(s)) set.add(s);
+    });
+    return ['ALL', ...Array.from(set)];
+  }, [trials, customSchemes, deletedSchemeCodes]);
+
+  // Filtered Trials based on search and scheme/status
   const filteredTrials = useMemo(() => {
     return trials.filter((trial) => {
       const matchesSearch =
         trial.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        trial.labSection.toLowerCase().includes(searchQuery.toLowerCase()) ||
         trial.scheme.toLowerCase().includes(searchQuery.toLowerCase()) ||
         trial.cycle.toLowerCase().includes(searchQuery.toLowerCase()) ||
         trial.instrument.toLowerCase().includes(searchQuery.toLowerCase()) ||
         trial.assignedStaff.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesScheme =
-        selectedSchemeFilter === 'ALL' || trial.scheme === selectedSchemeFilter;
+        selectedSchemeFilter === 'ALL' || trial.scheme.toUpperCase() === selectedSchemeFilter.toUpperCase();
 
       const matchesStatus =
         selectedStatusFilter === 'ALL' ||
@@ -64,21 +99,6 @@ export const EQAView: React.FC<EQAViewProps> = ({
       return matchesSearch && matchesScheme && matchesStatus;
     });
   }, [trials, searchQuery, selectedSchemeFilter, selectedStatusFilter]);
-
-  const getSchemeBadgeColor = (scheme: string) => {
-    switch (scheme) {
-      case 'RIQAS':
-        return 'bg-[#1E40AF] text-white';
-      case 'CAP':
-        return 'bg-[#0284C7] text-white';
-      case 'UKNEQAS':
-        return 'bg-[#3B82F6] text-white';
-      case 'EQAS':
-        return 'bg-[#0F172A] text-white';
-      default:
-        return 'bg-[#64748B] text-white';
-    }
-  };
 
   const getStatusBadge = (status: EQAStatus, label: string) => {
     if (status === 'due_tomorrow' || status === 'overdue') {
@@ -107,6 +127,12 @@ export const EQAView: React.FC<EQAViewProps> = ({
 
   const hasActiveFilters = selectedSchemeFilter !== 'ALL' || selectedStatusFilter !== 'ALL';
 
+  // Counts for summary metrics
+  const activeCount = trials.filter((t) => t.status !== 'submitted').length;
+  const pendingCount = trials.filter((t) => t.status === 'pending').length;
+  const urgentCount = trials.filter((t) => t.status === 'due_tomorrow' || t.status === 'overdue').length;
+  const submittedCount = trials.filter((t) => t.status === 'submitted').length;
+
   return (
     <div className="p-3 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto space-y-8 sm:space-y-10 animate-in fade-in duration-200 overflow-x-hidden">
       {/* Header Section */}
@@ -122,6 +148,22 @@ export const EQAView: React.FC<EQAViewProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Manage Schemes / Providers Button */}
+          {onOpenManageSchemes && (
+            <button
+              type="button"
+              onClick={onOpenManageSchemes}
+              className="bg-white hover:bg-[#F8FAFC] text-[#0F172A] border border-[#CBD5E1] hover:border-[#94A3B8] font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider font-bold py-2 sm:py-2.5 px-3.5 sm:px-4 rounded-full transition-all duration-200 flex items-center gap-1.5 shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[#1E40AF]">verified</span>
+              <span>Schemes & Portals</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[#EFF6FF] text-[#1E40AF] font-bold">
+                {allKnownSchemes.length}
+              </span>
+            </button>
+          )}
+
+          {/* Filter Popover */}
           <div className="relative" ref={filterMenuRef}>
             <button
               id="btn-eqa-filter"
@@ -145,7 +187,7 @@ export const EQAView: React.FC<EQAViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowFilterMenu(false)}
-                    className="text-[#64748B] hover:text-[#0F172A] p-1"
+                    className="text-[#64748B] hover:text-[#0F172A] p-1 cursor-pointer"
                     aria-label="Close filter"
                   >
                     <span className="material-symbols-outlined text-[18px]">close</span>
@@ -153,24 +195,41 @@ export const EQAView: React.FC<EQAViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[#94A3B8] block mb-2">
-                    Scheme / Provider
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['ALL', 'RIQAS', 'CAP', 'UKNEQAS', 'EQAS'].map((sc) => (
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-[#94A3B8] block">
+                      Scheme / Provider
+                    </label>
+                    {onOpenManageSchemes && (
                       <button
-                        key={sc}
                         type="button"
-                        onClick={() => setSelectedSchemeFilter(sc)}
-                        className={`text-xs px-3 py-1.5 rounded-full font-bold cursor-pointer transition-colors ${
-                          selectedSchemeFilter === sc
-                            ? 'bg-[#1E40AF] text-white'
-                            : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]'
-                        }`}
+                        onClick={() => {
+                          setShowFilterMenu(false);
+                          onOpenManageSchemes();
+                        }}
+                        className="text-[11px] text-[#1E40AF] font-bold hover:underline"
                       >
-                        {sc}
+                        + Add Scheme
                       </button>
-                    ))}
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterSchemeOptions.map((sc) => {
+                      const info = sc === 'ALL' ? null : getSchemeInfo(sc, customSchemes);
+                      return (
+                        <button
+                          key={sc}
+                          type="button"
+                          onClick={() => setSelectedSchemeFilter(sc)}
+                          className={`text-xs px-3 py-1.5 rounded-full font-bold cursor-pointer transition-colors ${
+                            selectedSchemeFilter === sc
+                              ? 'bg-[#1E40AF] text-white'
+                              : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]'
+                          }`}
+                        >
+                          {info ? info.shortName : 'ALL'}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -208,14 +267,14 @@ export const EQAView: React.FC<EQAViewProps> = ({
                       setSelectedSchemeFilter('ALL');
                       setSelectedStatusFilter('ALL');
                     }}
-                    className="text-xs text-[#64748B] hover:text-[#0F172A] font-bold"
+                    className="text-xs text-[#64748B] hover:text-[#0F172A] font-bold cursor-pointer"
                   >
                     Reset Filters
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowFilterMenu(false)}
-                    className="text-xs bg-[#1E40AF] text-white px-4 py-1.5 rounded-full font-bold"
+                    className="text-xs bg-[#1E40AF] text-white px-4 py-1.5 rounded-full font-bold cursor-pointer"
                   >
                     Done
                   </button>
@@ -224,6 +283,27 @@ export const EQAView: React.FC<EQAViewProps> = ({
             )}
           </div>
 
+          {/* Batch Selection Mode Button */}
+          {filteredTrials.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsBatchMode(!isBatchMode);
+                setSelectedTrialIds([]);
+              }}
+              className={`font-['Public_Sans',sans-serif] text-xs font-bold py-2 sm:py-2.5 px-3.5 sm:px-4 rounded-full transition-all duration-200 flex items-center gap-1.5 cursor-pointer whitespace-nowrap border ${
+                isBatchMode
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                  : 'bg-white hover:bg-[#F8FAFC] text-[#475569] border-[#CBD5E1]'
+              }`}
+              title="Toggle multi-selection to batch delete trials"
+            >
+              <span className="material-symbols-outlined text-[16px]">checklist</span>
+              <span>{isBatchMode ? 'Exit Selection' : 'Batch Select'}</span>
+            </button>
+          )}
+
+          {/* Add Trial Button */}
           <button
             id="btn-eqa-add-trial-top"
             type="button"
@@ -236,14 +316,16 @@ export const EQAView: React.FC<EQAViewProps> = ({
         </div>
       </div>
 
-      {/* Quick Filter Strip for Mobile & Desktop */}
+      {/* Quick Filter Strip */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none no-scrollbar">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748B] shrink-0 mr-1">
             Scheme:
           </span>
-          {['ALL', 'RIQAS', 'CAP', 'UKNEQAS', 'EQAS'].map((sc) => {
+          {filterSchemeOptions.map((sc) => {
             const isSelected = selectedSchemeFilter === sc;
+            const info = sc === 'ALL' ? null : getSchemeInfo(sc, customSchemes);
+            const label = info ? info.shortName : 'ALL';
             return (
               <button
                 key={sc}
@@ -255,7 +337,7 @@ export const EQAView: React.FC<EQAViewProps> = ({
                     : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]'
                 }`}
               >
-                {sc}
+                {label}
               </button>
             );
           })}
@@ -301,7 +383,7 @@ export const EQAView: React.FC<EQAViewProps> = ({
         </div>
       </div>
 
-      {/* Summary Metrics (4 cards) */}
+      {/* Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Active Trials */}
         <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
@@ -320,112 +402,192 @@ export const EQAView: React.FC<EQAViewProps> = ({
         <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider text-[#64748B] font-semibold">
-              Pending Results
+              Pending Analysis
             </h3>
-            <span className="material-symbols-outlined text-[#0284C7] text-[24px]">pending_actions</span>
+            <span className="material-symbols-outlined text-[#64748B] text-[24px]">schedule</span>
           </div>
           <p className="font-['Noto_Serif',serif] text-3xl sm:text-4xl font-bold text-[#0F172A]">
             {pendingCount}
           </p>
         </div>
 
-        {/* Overdue / Urgent */}
-        <div className="bg-[#FEE2E2] p-5 sm:p-6 rounded-3xl flex flex-col justify-between shadow-xs border border-[#DC2626]/20">
+        {/* Urgent & Overdue */}
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider text-[#991B1B] font-bold">
-              Overdue / Urgent
+            <h3 className="font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider text-[#DC2626] font-semibold">
+              Urgent / Overdue
             </h3>
-            <span className="material-symbols-outlined text-[#DC2626] text-[24px]">error</span>
+            <span className="material-symbols-outlined text-[#DC2626] text-[24px]">warning</span>
           </div>
           <p className="font-['Noto_Serif',serif] text-3xl sm:text-4xl font-bold text-[#DC2626]">
-            {overdueCount}
+            {urgentCount}
           </p>
         </div>
 
-        {/* Yearly Compliance */}
+        {/* Submitted */}
         <div className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider text-[#64748B] font-semibold">
-              Yearly Compliance
+            <h3 className="font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider text-[#059669] font-semibold">
+              Submitted Rounds
             </h3>
-            <span className="material-symbols-outlined text-[#059669] text-[24px]">verified</span>
+            <span className="material-symbols-outlined text-[#059669] text-[24px]">task_alt</span>
           </div>
-          <div className="flex items-end gap-1.5">
-            <p className="font-['Noto_Serif',serif] text-3xl sm:text-4xl font-bold text-[#0F172A]">
-              {complianceRate}
-            </p>
-            <p className="text-sm font-semibold text-[#64748B] mb-1">%</p>
-          </div>
+          <p className="font-['Noto_Serif',serif] text-3xl sm:text-4xl font-bold text-[#059669]">
+            {submittedCount}
+          </p>
         </div>
       </div>
 
-      {/* Current Cycle Header */}
+      {/* Trials Grid Section */}
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="font-['Noto_Serif',serif] text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight">
-              Current Cycle
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="font-['Noto_Serif',serif] text-xl sm:text-2xl font-bold text-[#0F172A]">
+              Proficiency Surveys & Trials
             </h2>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              Proficiency testing schedules, test parameters, and submission deadlines.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-[#64748B] bg-[#F8FAFC] px-3.5 py-1.5 rounded-full border border-[#E2E8F0]">
-              Showing {filteredTrials.length} of {trials.length} trials
+            <span className="text-xs bg-[#F1F5F9] text-[#475569] font-bold px-2.5 py-0.5 rounded-full">
+              {filteredTrials.length} {filteredTrials.length === 1 ? 'Survey' : 'Surveys'}
             </span>
           </div>
+          {onOpenManageSchemes && (
+            <button
+              type="button"
+              onClick={onOpenManageSchemes}
+              className="text-xs text-[#1E40AF] font-bold hover:underline self-start sm:self-auto flex items-center gap-1 cursor-pointer"
+            >
+              <span>Explore Provider Directory ({allKnownSchemes.length})</span>
+              <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+            </button>
+          )}
         </div>
 
-        {/* Bento Grid List View */}
         {filteredTrials.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-3xl border border-[#E2E8F0] p-8">
-            <span className="material-symbols-outlined text-4xl text-[#94A3B8] mb-2">biotech</span>
-            <p className="font-bold text-lg text-[#0F172A]">No EQA trials matching criteria</p>
-            <p className="text-sm text-[#475569] mt-1">Try clearing filters or search query.</p>
+          <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-[#CBD5E1] space-y-4">
+            <div className="w-16 h-16 rounded-full bg-[#EFF6FF] flex items-center justify-center mx-auto text-[#1E40AF]">
+              <span className="material-symbols-outlined text-[32px]">science</span>
+            </div>
+            <div>
+              <p className="font-bold text-lg text-[#0F172A]">No EQA trials matching criteria</p>
+              <p className="text-xs text-[#64748B] mt-1">
+                {hasActiveFilters
+                  ? 'Try clearing the scheme or status filters above.'
+                  : 'Register a new proficiency trial to begin quality tracking.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSchemeFilter('ALL');
+                    setSelectedStatusFilter('ALL');
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-[#64748B] bg-[#F1F5F9] rounded-full hover:bg-[#E2E8F0] cursor-pointer"
+                >
+                  Reset Filters
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onOpenAddTrial}
+                className="px-5 py-2 bg-[#1E40AF] text-white font-['Public_Sans',sans-serif] text-xs uppercase tracking-wider font-bold rounded-full shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>Register Trial</span>
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredTrials.map((trial) => {
               const isUrgent = trial.status === 'due_tomorrow' || trial.status === 'overdue';
               const isSubmitted = trial.status === 'submitted';
+              const schemeInfo = getSchemeInfo(trial.scheme, customSchemes);
 
               return (
                 <div
                   key={trial.id}
-                  id={`trial-card-${trial.id}`}
-                  className={`bg-white rounded-3xl p-5 sm:p-7 border border-[#E2E8F0] relative overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200 ${
-                    isSubmitted ? 'opacity-85' : ''
+                  onClick={() => {
+                    if (isBatchMode) {
+                      setSelectedTrialIds((prev) =>
+                        prev.includes(trial.id)
+                          ? prev.filter((id) => id !== trial.id)
+                          : [...prev, trial.id]
+                      );
+                    }
+                  }}
+                  className={`bg-white rounded-3xl p-6 sm:p-7 border shadow-xs relative overflow-hidden transition-all duration-300 flex flex-col justify-between ${
+                    isBatchMode ? 'cursor-pointer' : 'hover:shadow-xl hover:-translate-y-1'
+                  } ${
+                    selectedTrialIds.includes(trial.id)
+                      ? 'border-[#1E40AF] ring-2 ring-[#1E40AF]/30 bg-blue-50/20'
+                      : isUrgent
+                      ? 'border-[#E2E8F0] ring-1 ring-[#DC2626]/20'
+                      : 'border-[#E2E8F0]'
                   }`}
                 >
                   {/* Left Side Status Bar */}
                   <div
                     className={`absolute top-0 left-0 w-1.5 h-full ${
-                      isUrgent
+                      selectedTrialIds.includes(trial.id)
+                        ? 'bg-[#1E40AF]'
+                        : isUrgent
                         ? 'bg-[#DC2626]'
                         : isSubmitted
-                        ? 'bg-[#E2E8F0]'
+                        ? 'bg-[#10B981]'
                         : 'bg-[#1E40AF]'
                     }`}
                   />
 
                   {/* Top Bar inside Card */}
                   <div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start mb-5 sm:mb-6 gap-3">
-                      <div className="min-w-0">
-                        <span
-                          className={`inline-block px-3 py-1 font-['Public_Sans',sans-serif] text-xs rounded-full mb-2 font-bold tracking-widest uppercase ${getSchemeBadgeColor(
-                            trial.scheme
-                          )}`}
-                        >
-                          {trial.scheme}
-                        </span>
+                    <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {isBatchMode && (
+                            <input
+                              type="checkbox"
+                              checked={selectedTrialIds.includes(trial.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                if (e.target.checked) {
+                                  setSelectedTrialIds((prev) => [...prev, trial.id]);
+                                } else {
+                                  setSelectedTrialIds((prev) => prev.filter((id) => id !== trial.id));
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-[#1E40AF] focus:ring-[#1E40AF] cursor-pointer mr-1"
+                            />
+                          )}
+
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 font-['Public_Sans',sans-serif] text-xs rounded-full font-bold tracking-wider uppercase ${schemeInfo.badgeBg} ${schemeInfo.badgeText}`}
+                          >
+                            <span>{schemeInfo.shortName}</span>
+                            {schemeInfo.portalUrl && (
+                              <a
+                                href={schemeInfo.portalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="opacity-80 hover:opacity-100 hover:scale-110 transition-transform"
+                                title={`Open ${schemeInfo.shortName} Portal`}
+                              >
+                                <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                              </a>
+                            )}
+                          </span>
+
+                          <span className="text-[10px] font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full uppercase">
+                            {trial.cycle}
+                          </span>
+                        </div>
+
                         <h3 className="font-['Noto_Serif',serif] text-lg sm:text-xl font-bold text-[#0F172A] leading-tight break-words">
                           {trial.title}
                         </h3>
-                        <p className="font-['Inter',sans-serif] text-xs sm:text-sm text-[#64748B] mt-1">
-                          {trial.cycle} / {trial.trialNumber}
+                        <p className="font-['Inter',sans-serif] text-xs text-[#64748B] mt-1">
+                          {trial.trialNumber} • {schemeInfo.provider}
                         </p>
                       </div>
 
@@ -433,17 +595,21 @@ export const EQAView: React.FC<EQAViewProps> = ({
                         {getStatusBadge(trial.status, trial.statusLabel)}
                         <button
                           type="button"
-                          onClick={() => onDeleteTrial(trial.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTrialToDelete(trial);
+                          }}
                           className="text-[#94A3B8] hover:text-[#DC2626] p-1.5 rounded-full hover:bg-[#FEE2E2]/60 transition-colors cursor-pointer"
                           aria-label="Delete trial"
+                          title="Delete Trial Record"
                         >
-                          <span className="material-symbols-outlined text-[20px]">delete</span>
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
                         </button>
                       </div>
                     </div>
 
                     {/* 2x2 Details Grid */}
-                    <div className="grid grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-3 sm:gap-x-4 mb-5 sm:mb-6 bg-[#F8FAFC] p-3.5 sm:p-4 rounded-2xl border border-[#E2E8F0]/70">
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-3 mb-4 bg-[#F8FAFC] p-3.5 rounded-2xl border border-[#E2E8F0]/70">
                       <div>
                         <p className="font-['Public_Sans',sans-serif] text-[10px] text-[#94A3B8] mb-0.5 uppercase tracking-widest font-bold">
                           Received
@@ -478,15 +644,39 @@ export const EQAView: React.FC<EQAViewProps> = ({
                         <p className="text-xs sm:text-sm font-medium text-[#475569] truncate">{trial.assignedStaff}</p>
                       </div>
                     </div>
+
+                    {/* Parameters Preview if present */}
+                    {trial.parameters && trial.parameters.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider mb-1">
+                          Test Parameters ({trial.parameters.length}):
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {trial.parameters.slice(0, 4).map((p, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                          {trial.parameters.length > 4 && (
+                            <span className="text-[11px] text-[#64748B] font-bold px-1.5 py-0.5">
+                              +{trial.parameters.length - 4} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Bottom Action Footer */}
                   <div className="pt-4 border-t border-[#E2E8F0] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#EFF6FF] flex items-center justify-center text-[#1E40AF] shrink-0">
-                        <span className="material-symbols-outlined text-[18px]">science</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-[#EFF6FF] flex items-center justify-center text-[#1E40AF] shrink-0">
+                        <span className="material-symbols-outlined text-[16px]">biotech</span>
                       </div>
-                      <span className="text-xs sm:text-sm font-medium text-[#475569]">
+                      <span className="text-xs font-medium text-[#475569]">
                         {trial.labSection}
                       </span>
                     </div>
@@ -516,8 +706,155 @@ export const EQAView: React.FC<EQAViewProps> = ({
             })}
           </div>
         )}
+
+        {/* Floating Batch Actions Toolbar */}
+        {isBatchMode && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0F172A] text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 sm:gap-4 border border-slate-700 animate-in slide-in-from-bottom-5">
+            <span className="text-xs font-bold whitespace-nowrap">
+              {selectedTrialIds.length} of {filteredTrials.length} selected
+            </span>
+            <div className="h-4 w-px bg-slate-700" />
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedTrialIds.length === filteredTrials.length) {
+                  setSelectedTrialIds([]);
+                } else {
+                  setSelectedTrialIds(filteredTrials.map((t) => t.id));
+                }
+              }}
+              className="text-xs font-bold text-slate-300 hover:text-white transition-colors cursor-pointer whitespace-nowrap"
+            >
+              {selectedTrialIds.length === filteredTrials.length ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              disabled={selectedTrialIds.length === 0}
+              onClick={() => setShowBatchDeleteConfirm(true)}
+              className="px-4 py-1.5 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            >
+              <span className="material-symbols-outlined text-[16px]">delete</span>
+              <span>Delete ({selectedTrialIds.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsBatchMode(false);
+                setSelectedTrialIds([]);
+              }}
+              className="text-slate-400 hover:text-white p-1 rounded-full cursor-pointer ml-1"
+              title="Close batch mode"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        )}
+
+        {/* Single Trial Deletion Confirmation Dialog */}
+        {trialToDelete && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-red-200 animate-in zoom-in-95 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shadow-xs">
+                <span className="material-symbols-outlined text-[26px]">delete_forever</span>
+              </div>
+              <div>
+                <h3 className="font-['Noto_Serif',serif] font-bold text-lg text-[#0F172A]">
+                  Delete EQA Trial?
+                </h3>
+                <p className="text-xs text-[#64748B] mt-1">
+                  Are you sure you want to delete this proficiency assessment? This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#0F172A]">{trialToDelete.title}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#1E40AF]">
+                    {trialToDelete.scheme}
+                  </span>
+                </div>
+                <div className="text-[11px] text-[#64748B] flex items-center justify-between">
+                  <span>Cycle: {trialToDelete.cycle} ({trialToDelete.trialNumber})</span>
+                  <span>{trialToDelete.instrument}</span>
+                </div>
+                {trialToDelete.status === 'submitted' && (
+                  <div className="p-2 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] font-medium flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-amber-600">info</span>
+                    <span>This trial has submitted results. Deleting will erase all recorded analyte values.</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setTrialToDelete(null)}
+                  className="px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteTrial(trialToDelete.id);
+                    setTrialToDelete(null);
+                  }}
+                  className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                  <span>Yes, Delete Trial</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Batch Delete Confirmation Dialog */}
+        {showBatchDeleteConfirm && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-red-200 animate-in zoom-in-95 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shadow-xs">
+                <span className="material-symbols-outlined text-[26px]">delete_sweep</span>
+              </div>
+              <div>
+                <h3 className="font-['Noto_Serif',serif] font-bold text-lg text-[#0F172A]">
+                  Delete {selectedTrialIds.length} Selected Trials?
+                </h3>
+                <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
+                  You are about to permanently delete {selectedTrialIds.length} external quality trials and their recorded analyte data. This action cannot be reversed.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDeleteConfirm(false)}
+                  className="px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onDeleteMultipleTrials) {
+                      onDeleteMultipleTrials(selectedTrialIds);
+                    } else {
+                      selectedTrialIds.forEach((id) => onDeleteTrial(id));
+                    }
+                    setSelectedTrialIds([]);
+                    setIsBatchMode(false);
+                    setShowBatchDeleteConfirm(false);
+                  }}
+                  className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                  <span>Delete All {selectedTrialIds.length}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-

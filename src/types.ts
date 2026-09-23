@@ -31,7 +31,36 @@ export interface StockItem {
   lots?: StockLot[];
 }
 
-export type EQAScheme = 'RIQAS' | 'CAP' | 'UKNEQAS' | 'EQAS' | 'RCPA';
+export type EQAScheme =
+  | 'RIQAS'
+  | 'CAP'
+  | 'UKNEQAS'
+  | 'EQAS'
+  | 'RCPA'
+  | 'DMSC_BLQS'
+  | 'EQAM_MAHIDOL'
+  | 'INSTAND'
+  | 'ONEWORLD'
+  | 'ECAT'
+  | 'WEQAS'
+  | (string & {});
+
+export interface EQASchemeDefinition {
+  id: string;
+  code: string;
+  shortName: string;
+  fullName: string;
+  provider: string;
+  country: string;
+  category?: 'Global / International' | 'National / Regional' | 'Specialty' | 'Custom';
+  description?: string;
+  portalUrl?: string;
+  accreditation?: string;
+  badgeBg: string;
+  badgeText: string;
+  isCustom?: boolean;
+}
+
 export type EQAStatus = 'due_tomorrow' | 'pending' | 'submitted' | 'overdue';
 
 export interface EQATrial {

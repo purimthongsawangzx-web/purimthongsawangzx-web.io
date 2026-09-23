@@ -1,6 +1,7 @@
 import {
   StockItem,
   EQATrial,
+  EQASchemeDefinition,
   StaffMember,
   ShiftAssignment,
   DirectorySection,
@@ -32,6 +33,8 @@ import {
 export interface UserDataset {
   stockItems: StockItem[];
   trials: EQATrial[];
+  customSchemes?: EQASchemeDefinition[];
+  deletedSchemeCodes?: string[];
   staffList: StaffMember[];
   shifts: ShiftAssignment[];
   directorySections: DirectorySection[];
@@ -55,6 +58,8 @@ export function getInitialTemplateDataset(): UserDataset {
   return {
     stockItems: JSON.parse(JSON.stringify(INITIAL_STOCK_ITEMS)),
     trials: JSON.parse(JSON.stringify(INITIAL_EQA_TRIALS)),
+    customSchemes: [],
+    deletedSchemeCodes: [],
     staffList: JSON.parse(JSON.stringify(INITIAL_STAFF)),
     shifts: JSON.parse(JSON.stringify(INITIAL_SHIFTS)),
     directorySections: JSON.parse(JSON.stringify(DIRECTORY_SECTIONS)),
@@ -153,6 +158,12 @@ export function loadUserDataset(userId: string): UserDataset {
         }
         if (!Array.isArray(parsed.referralLabs) || parsed.referralLabs.length === 0) {
           parsed.referralLabs = JSON.parse(JSON.stringify(INITIAL_REFERRAL_LABS));
+        }
+        if (!Array.isArray(parsed.customSchemes)) {
+          parsed.customSchemes = [];
+        }
+        if (!Array.isArray(parsed.deletedSchemeCodes)) {
+          parsed.deletedSchemeCodes = [];
         }
         return parsed;
       }
